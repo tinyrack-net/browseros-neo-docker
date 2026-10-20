@@ -3,28 +3,71 @@
 set -u # Treat unset variables as an error.
 
 #
-# Keep the application window from staying minimized.
+# Keep the application's windows reachable.
 #
 # BrowserOS neo (Chromium) draws its own window controls, one of which
-# minimizes the window. A minimized window is unmapped and stops rendering,
-# so the web GUI shows a black screen and clicks have nothing to act on.
-# This desktop has no taskbar, no window menu and no keyboard bindings, so
-# there is no way to bring the window back once it is minimized. Undo the
-# minimize as soon as it happens.
+# minimizes the window. A minimized window is unmapped and stops rendering, so
+# it disappears from the web GUI. This desktop has no taskbar and no window
+# menu, and the only switching key Openbox binds by default is Alt+Tab, which
+# the operating system of whoever is watching the web GUI consumes before it
+# ever reaches the browser. A window that gets minimized therefore has to be
+# brought back here.
+#
+# Windows are matched by WM_CLASS instead of by title: a second window, a popup
+# or a dialog does not necessarily carry the application name in its title,
+# while the application's internal windows, which are never shown, use a class
+# of their own ("browserclaw"). A window is only restored when the window
+# manager reports it as hidden (_NET_WM_STATE_HIDDEN), so a window that was
+# never shown stays hidden.
+#
+# The window that is in front when the minimize happens stays in front: the
+# restored window comes back behind it. Minimizing a window while another one
+# is visible therefore shows the other window, and the minimized one can be
+# brought back the same way or with the switching keys added by
+# 56-openbox-keys.sh. When no other window is left, the minimize is undone
+# instead, so the web GUI can never end up on an empty screen.
 #
 
-WINDOW_NAME="${APP_NAME:-BrowserOS neo}"
+# Chromium sets the WM_CLASS of its windows to "chromium-browser
+# (<user-data-dir>)", "Chromium-browser".
+WINDOW_CLASS='^chromium-browser'
 XDOTOOL=/usr/bin/xdotool
+# Ships with the Openbox of the base image.
+OBXPROP=/opt/base/bin/obxprop
 
 while true; do
-    # A minimized window is unmapped, so it is missing from the list of
-    # visible windows even though it still exists.
-    if [ -z "$("${XDOTOOL}" search --onlyvisible --name "${WINDOW_NAME}" 2>/dev/null)" ]; then
-        for win in $("${XDOTOOL}" search --name "${WINDOW_NAME}" 2>/dev/null); do
+    hidden=
+    for win in $("${XDOTOOL}" search --classname "${WINDOW_CLASS}" 2>/dev/null); do
+        if "${OBXPROP}" --id "${win}" _NET_WM_STATE 2>/dev/null | grep -q _NET_WM_STATE_HIDDEN; then
+            hidden="${hidden}${hidden:+ }${win}"
+        fi
+    done
+
+    if [ -n "${hidden}" ]; then
+        # The window the user is looking at, read before the restore below
+        # gives the focus to the restored windows.
+        front="$("${XDOTOOL}" getactivewindow 2>/dev/null || true)"
+
+        for win in ${hidden}; do
             "${XDOTOOL}" windowmap "${win}" 2>/dev/null || true
-            "${XDOTOOL}" windowactivate "${win}" 2>/dev/null || true
         done
+
+        # Mapping a window brings it to the front. Put the window that was in
+        # front back there, unless it is one of the windows that were just
+        # restored: in that case it was the last window on the screen, and
+        # undoing the minimize means leaving it in front.
+        case " ${hidden} " in
+            *" ${front} "*) front= ;;
+        esac
+
+        if [ -n "${front}" ]; then
+            "${XDOTOOL}" windowactivate "${front}" 2>/dev/null || true
+        else
+            last="${hidden##* }"
+            "${XDOTOOL}" windowactivate "${last}" 2>/dev/null || true
+        fi
     fi
+
     sleep 2
 done
 

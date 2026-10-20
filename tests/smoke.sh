@@ -18,7 +18,9 @@
 #   - MCP initialize succeeds with the token and reports browseros-neo,
 #   - MCP tools/list returns tools,
 #   - an event stream (SSE) passes through the proxy without buffering,
-#   - the renderer runs with the Chromium sandbox.
+#   - the renderer runs with the Chromium sandbox,
+#   - the window supervisor restores a minimized window, even when another
+#     window is visible, and the switching keys are installed.
 
 set -euo pipefail
 
@@ -199,6 +201,85 @@ check_sandbox() {
     ok "Chromium sandbox enabled"
 }
 
+# check_window_handling
+#
+# The window supervisor must keep the application's windows mapped, must put a
+# restored window behind the window that is in use, and the Openbox
+# configuration must carry the switching keys. The second window is simulated
+# with yad, which can be given the WM_CLASS the supervisor matches, so the check
+# does not depend on the application's own shortcuts.
+check_window_handling() {
+    docker exec "${CONTAINER}" grep -q 'C-F6' /var/run/openbox/rc.xml \
+        || fail "the Openbox configuration has no Ctrl+F6 binding"
+
+    if ! docker exec -i "${CONTAINER}" sh -s <<'EOF'
+set -e
+
+export DISPLAY=:0
+
+XDOTOOL=/usr/bin/xdotool
+OBXPROP=/opt/base/bin/obxprop
+
+visible_windows() { "${XDOTOOL}" search --onlyvisible --classname '^chromium-browser' 2>/dev/null; }
+is_hidden() { "${OBXPROP}" --id "$1" _NET_WM_STATE 2>/dev/null | grep -q _NET_WM_STATE_HIDDEN; }
+not_hidden() { ! is_hidden "$1"; }
+stack_top() { "${OBXPROP}" --root _NET_CLIENT_LIST_STACKING 2>/dev/null | sed 's/^.*= //' | awk -F, '{print $NF}' | tr -d ' '; }
+active_window() { "${XDOTOOL}" getactivewindow 2>/dev/null || echo none; }
+
+# wait_until DESCRIPTION COMMAND...
+wait_until() {
+    what="$1"
+    shift
+    i=0
+    while [ "${i}" -lt 30 ]; do
+        if "$@" >/dev/null 2>&1; then return 0; fi
+        sleep 1
+        i=$((i + 1))
+    done
+    echo "FAIL: ${what} did not happen within 30s" >&2
+    return 1
+}
+
+# The application window, and a minimized window coming back.
+wait_until "the application window to appear" visible_windows
+app="$(visible_windows | head -n1)"
+"${XDOTOOL}" windowactivate "${app}"
+sleep 1
+"${XDOTOOL}" windowminimize "${app}"
+wait_until "the minimized application window to come back" not_hidden "${app}"
+
+# A second window: minimizing it must not put it in front of the window in use.
+/opt/base/bin/yad --name='chromium-browser (smoke)' --class='Chromium-browser' \
+    --title='smoke test window' --text='smoke' --width=200 --height=100 >/dev/null 2>&1 &
+yad_pid=$!
+wait_until "the second window to appear" sh -c '[ "$(xdotool search --onlyvisible --classname "^chromium-browser" | wc -l)" -ge 2 ]'
+second="$(visible_windows | grep -v "^${app}$" | head -n1)"
+"${XDOTOOL}" windowactivate "${second}"
+sleep 1
+[ "$(active_window)" = "${second}" ] || { echo "FAIL: could not bring the second window to the front" >&2; exit 1; }
+"${XDOTOOL}" windowminimize "${second}"
+wait_until "the minimized second window to come back" not_hidden "${second}"
+[ "$(stack_top)" != "${second}" ] || { echo "FAIL: the restored window was put in front of the window in use" >&2; exit 1; }
+[ "$(active_window)" = "${app}" ] || { echo "FAIL: the window in use lost the focus to the restored window" >&2; exit 1; }
+
+# The switching keys.
+before="$(active_window)"
+"${XDOTOOL}" key --clearmodifiers ctrl+F6
+sleep 1
+[ "$(active_window)" != "${before}" ] || { echo "FAIL: Ctrl+F6 did not switch windows" >&2; exit 1; }
+"${XDOTOOL}" key --clearmodifiers ctrl+shift+F6
+sleep 1
+[ "$(active_window)" = "${before}" ] || { echo "FAIL: Ctrl+Shift+F6 did not switch back" >&2; exit 1; }
+
+kill "${yad_pid}" 2>/dev/null || true
+EOF
+    then
+        fail "the window supervisor did not behave as expected"
+    fi
+
+    ok "the window supervisor restores minimized windows and the switching keys work"
+}
+
 # MCP and the GUI on the same port (the defaults).
 echo "== MCP and the web GUI on one port"
 start_container shared \
@@ -211,6 +292,7 @@ wait_body "${WEB_URL}/healthz" ok "the health check"
 wait_mcp "${WEB_URL}/mcp" "MCP"
 check_mcp "${WEB_URL}/mcp" "shared port"
 check_sandbox
+check_window_handling
 stop_container
 
 # The same port, now with the login page in front of the GUI. MCP must keep

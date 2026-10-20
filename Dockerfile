@@ -13,7 +13,9 @@ ARG BROWSEROS_DEB_URL=https://github.com/browseros-ai/BrowserOS/releases/downloa
 # Install BrowserOS neo from the official Debian package. add-pkg prepares the
 # environment package scripts expect (e.g. /var/log -> /config/log) and cleans
 # up afterwards. xdotool is used by the window-guard service to undo the window
-# minimize that would otherwise leave the web GUI black and unclickable.
+# minimize that would otherwise leave the web GUI black and unclickable, and
+# obxprop, which the base image ships with Openbox, tells a minimized window
+# from one that was never shown.
 RUN \
     set -eu; \
     test -n "${BROWSEROS_VERSION}" || { echo "BROWSEROS_VERSION is required" >&2; exit 1; }; \
@@ -25,6 +27,7 @@ RUN \
     add-pkg /tmp/browseros-neo.deb fonts-noto-cjk xdotool; \
     del-pkg build-deps; \
     test -x /usr/bin/browserclaw; \
+    test -x /opt/base/bin/obxprop; \
     rm -f /tmp/browseros-neo.deb
 
 # Generate and install favicons from the icon shipped in the package.
@@ -54,6 +57,7 @@ RUN \
     find /etc/services.d -name '*.dep' -exec chmod 0644 {} + && \
     chmod 0755 \
         /etc/cont-init.d/55-mcp.sh \
+        /etc/cont-init.d/56-openbox-keys.sh \
         /etc/services.d/window-guard/run \
         /etc/services.d/window-guard/respawn && \
     set-cont-env APP_NAME "BrowserOS neo" && \

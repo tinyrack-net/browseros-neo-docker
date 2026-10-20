@@ -76,7 +76,17 @@ Sessions and settings persist across container restarts and recreation, as long 
 
 ## Web GUI window handling
 
-BrowserOS neo draws its own window controls, including a minimize button. A minimized window is unmapped and stops rendering, and because the desktop has no taskbar and no window menu there would be no way to bring it back from the web browser, leaving the GUI on a black, unclickable screen. A `window-guard` service de-iconifies the application window as soon as it gets minimized.
+BrowserOS neo draws its own window controls, including a minimize button, and it can have more than one window open (a new window, a popup, a dialog). A minimized window is unmapped and stops rendering, and the desktop has no taskbar and no window menu. The one key Openbox binds by default for switching windows (Alt+Tab) never reaches the browser either, because the operating system of whoever is watching the web GUI consumes it first. A minimized window would therefore be lost, leaving the GUI on a black, unclickable screen.
+
+A `window-guard` service keeps every window of the application mapped:
+
+- a window the window manager reports as minimized is mapped again,
+- the window that was in front stays in front, so a restored window comes back behind it. Minimizing a window while another one is visible therefore shows the other window, and the minimized one can be brought back the same way,
+- when no other window is left, the minimize is undone instead, so the GUI can never end up on an empty screen.
+
+Windows are matched by WM_CLASS (`chromium-browser`) rather than by title, so a second window, a popup or a dialog is restored as well, while the application's internal windows (class `browserclaw`) are left alone. Only windows the window manager reports as hidden (`_NET_WM_STATE_HIDDEN`) are restored, so a window that was never shown stays hidden.
+
+A `56-openbox-keys.sh` init script adds explicit switching keys to the Openbox configuration: `Ctrl+F6` and `Ctrl+Shift+F6` cycle forward and backward through the windows of the current desktop. It repeats `Alt+Tab` and `Alt+Shift+Tab` as well, because adding a `<keyboard>` section to the Openbox configuration replaces Openbox's built-in defaults.
 
 ## Connecting an MCP client
 
