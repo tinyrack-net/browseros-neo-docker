@@ -80,5 +80,5 @@ EXPOSE 9300
 LABEL \
     org.opencontainers.image.title="browseros-neo" \
     org.opencontainers.image.description="BrowserOS neo with a web GUI (noVNC) and a token-protected MCP endpoint" \
-    org.opencontainers.image.source="https://github.com/tinyrack-net/browseros-neo" \
+    org.opencontainers.image.source="https://github.com/tinyrack-net/browseros-neo-docker" \
     org.opencontainers.image.version="${BROWSEROS_VERSION}"

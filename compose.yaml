@@ -1,6 +1,6 @@
 services:
   browseros-neo:
-    image: ghcr.io/tinyrack-net/browseros-neo:latest
+    image: ghcr.io/tinyrack-net/browseros-neo-docker:latest
     container_name: browseros-neo
     restart: unless-stopped
     shm_size: 2gb

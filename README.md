@@ -4,7 +4,7 @@
 
 - **Web GUI**: noVNC-based web UI served on port `9300` by [jlesage/baseimage-gui](https://github.com/jlesage/docker-baseimage-gui)
 - **MCP**: BrowserOS neo's MCP server on `/mcp`, behind Bearer-token authentication. It is served by the same nginx as the web GUI, so it shares the web port by default (`WEB_LISTENING_PORT` and `MCP_LISTENING_PORT` both default to `9300`). Setting `MCP_LISTENING_PORT` to a different value gives MCP a port of its own.
-- **Automatic builds**: a new `browserclaw/v*` release is detected and `ghcr.io/tinyrack-net/browseros-neo` is published automatically
+- **Automatic builds**: a new `browserclaw/v*` release is detected and `ghcr.io/tinyrack-net/browseros-neo-docker` is published automatically
 
 ## Quick start
 
@@ -25,7 +25,7 @@ docker run -d --name browseros-neo \
   -p 9300:9300 \
   -e MCP_AUTH_TOKEN="$MCP_AUTH_TOKEN" \
   -v "$PWD/config:/config" \
-  ghcr.io/tinyrack-net/browseros-neo:latest
+  ghcr.io/tinyrack-net/browseros-neo-docker:latest
 ```
 
 ## Image tags
